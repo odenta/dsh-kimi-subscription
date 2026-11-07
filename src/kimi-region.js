@@ -57,6 +57,13 @@ export function kimiRegionSite(region) {
   return KIMI_REGION_SITES[kimiRegionOf(region)]
 }
 
+/** Keep the selected region while matching the installed provider's protocol root. */
+export function kimiRegionModelBaseUrl(region, catalogBaseUrl) {
+  const site = kimiRegionSite(region)
+  // pi-ai 1.1 uses Anthropic /coding; 1.3 uses OpenAI /coding/v1.
+  return /\/v1\/?$/u.test(catalogBaseUrl) ? `${site.baseUrl}/v1` : site.baseUrl
+}
+
 /**
  * The region an auth resolution sends requests to, read from the base URL the
  * provider put in it. Usage and search follow the model requests this way,
@@ -68,7 +75,7 @@ export function kimiRegionSite(region) {
 export function kimiRegionSiteOfAuth(auth) {
   const baseUrl = auth?.baseUrl
   if (baseUrl === undefined) return KIMI_REGION_SITES[DEFAULT_KIMI_REGION]
-  const site = Object.values(KIMI_REGION_SITES).find(entry => entry.baseUrl === baseUrl)
+  const site = Object.values(KIMI_REGION_SITES).find(entry => entry.baseUrl === baseUrl || `${entry.baseUrl}/v1` === baseUrl)
   if (site === undefined) throw new Error('Kimi Code subscription region is not recognized')
   return site
 }

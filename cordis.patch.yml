@@ -1,14 +1,8 @@
-# Register the dedicated Kimi Code subscription route and its settings surface.
-# The route is intentionally separate from llm-pi-ai's kimi-coding API-key route.
+# Register the subscription route and account RPC dependencies for DSH Web 0.2.2.
+# Preserve Connection's existing startup dependency and configuration.
+- id: connection
+  name: '@deepseek-ai/dsh-client-connection'
+  inject: [webStartup, webServer]
 - insert:
     - id: kimi-subscription
       name: 'dsh-kimi-subscription'
-
-# No patch for the official `connection` row. Versions 1.2.4 to 1.3.8 replaced
-# its inject list to add `webServer`, and an entry patch replaces the whole
-# list, so it also had to restate the host's own startup service. DSH 0.2.1
-# renamed that service from webRuntime to webStartup; the replaced list kept
-# waiting for webRuntime, Connection never started, and the desktop app could
-# not boot. The plugin now attaches the running web server to the connection
-# fiber itself before opening its channel (src/connection-webserver.js), so
-# the official row stays exactly as each DSH version ships it.

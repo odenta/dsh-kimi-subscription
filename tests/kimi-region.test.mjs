@@ -6,6 +6,7 @@ import {
   KIMI_AUTH_ORIGINS,
   KIMI_REGIONS,
   kimiRegionOf,
+  kimiRegionModelBaseUrl,
   kimiRegionSite,
   kimiRegionSiteOfAuth,
 } from '../src/kimi-region.js'
@@ -49,6 +50,15 @@ test('no region is mainland-China and an unknown one is refused', () => {
   assert.equal(kimiRegionOf('global'), 'global')
   for (const value of ['', 'cn', 'Global', 'toString', '__proto__', null, 1, {}]) {
     assert.throws(() => kimiRegionOf(value), /Kimi Code subscription region is invalid/u)
+  }
+})
+
+test('regional model URLs preserve the installed provider protocol root', () => {
+  for (const region of KIMI_REGIONS) {
+    const site = kimiRegionSite(region)
+    assert.equal(kimiRegionModelBaseUrl(region, 'https://api.kimi.com/coding'), site.baseUrl)
+    assert.equal(kimiRegionModelBaseUrl(region, 'https://api.kimi.com/coding/v1'), `${site.baseUrl}/v1`)
+    assert.equal(kimiRegionSiteOfAuth({ baseUrl: `${site.baseUrl}/v1` }).usageUrl, site.usageUrl)
   }
 })
 

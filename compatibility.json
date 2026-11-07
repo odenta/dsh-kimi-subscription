@@ -1,4 +1,5 @@
 {
+  "changeScope": "The Connection dependency patch targets the DSH 0.2.2 Web composition with webStartup and webServer. Subscription request URLs were checked with pi-ai 1.3.0 using offline OAuth/API-key streams for both regions; the baseline suite remains on pi-ai 1.1.0. Historical validation records below do not verify these changes on every listed runtime. No live subscription inference was performed.",
   "latestTested": "0.2.1-rc.3",
   "acceptedRuntimeRange": ">=0.1.1-rc.2 <0.3.0-0",
   "supported": [

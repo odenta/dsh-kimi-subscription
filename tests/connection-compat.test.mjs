@@ -16,7 +16,8 @@ const bundle = load(await readFile(new URL('../cordis.patch.yml', import.meta.ur
 
 // The service the official connection row reads trustedHosts from. dsh web and
 // desktop share that row; DSH 0.2.1 renamed the service.
-const STARTUP_SERVICE = { '0.2.0': 'webRuntime', '0.2.1': 'webStartup' }
+const STARTUP_SERVICE = { '0.2.0': 'webRuntime', '0.2.1': 'webStartup', '0.2.2': 'webStartup' }
+const ORIGINAL_PLUGIN_PATCH = [{ insert: [{ id: 'kimi-subscription', name: 'dsh-kimi-subscription' }] }]
 
 // The row patch 1.3.5 to 1.3.8 shipped. It replaced the row's inject list with
 // the 0.2.0 names, so on 0.2.1 Connection waited for webRuntime forever.
@@ -143,12 +144,14 @@ async function assertRejectsUnauthenticated(routes) {
   assert.equal(body, 'unauthorized')
 }
 
-test('shipped bundle inserts the plugin row and patches no official row', () => {
-  assert.deepEqual(bundle, [{ insert: [{ id: 'kimi-subscription', name: 'dsh-kimi-subscription' }] }])
+test('shipped bundle declares the current Connection startup and web server requirements', () => {
+  assert.deepEqual(bundle, [{
+    id: 'connection', name: '@deepseek-ai/dsh-client-connection', inject: ['webStartup', 'webServer'],
+  }, ...ORIGINAL_PLUGIN_PATCH])
 })
 
 test('1.3.8 row patch keeps DSH 0.2.1 Connection waiting for webRuntime', async () => {
-  const host = await compose([...bundle, ROW_PATCH_1_3_8], { host: '0.2.1' })
+  const host = await compose([...ORIGINAL_PLUGIN_PATCH, ROW_PATCH_1_3_8], { host: '0.2.1' })
   try {
     assert.deepEqual(host.rows.find(row => row.id === 'connection').inject, ROW_PATCH_1_3_8.inject)
     // This is the desktop boot failure: "connection (required)  webRuntime".
@@ -162,7 +165,7 @@ test('1.3.8 row patch keeps DSH 0.2.1 Connection waiting for webRuntime', async 
 })
 
 test('the 1.3.8 row patch only ever worked while the service was named webRuntime', async () => {
-  const host = await compose([...bundle, ROW_PATCH_1_3_8], { host: '0.2.0' })
+  const host = await compose([...ORIGINAL_PLUGIN_PATCH, ROW_PATCH_1_3_8], { host: '0.2.0' })
   try {
     assert.equal(stateOf(host.loader, 'connection'), ACTIVE)
     assert.equal(host.routes.has(CHANNEL), true)
@@ -171,45 +174,49 @@ test('the 1.3.8 row patch only ever worked while the service was named webRuntim
   }
 })
 
-for (const version of Object.keys(STARTUP_SERVICE)) {
-  test(`DSH ${version}: Connection alone cannot open a channel without the web server binding`, async () => {
-    await assert.rejects(mount(bundle, { host: version }), /cannot get property "webServer" without inject/u)
-  })
+test('DSH 0.2.2: Connection alone cannot open a channel without the web server binding', async () => {
+  await assert.rejects(mount(ORIGINAL_PLUGIN_PATCH, { host: '0.2.2' }), /cannot get property "webServer" without inject/u)
+})
 
-  test(`DSH ${version}: shipped bundle opens the account channel on the official row and disposes it`, async () => {
-    await withHome(async () => {
-      const host = await mount(bundle, { host: version, fullPlugin: true })
-      try {
-        const startup = STARTUP_SERVICE[version]
-        const row = host.rows.find(item => item.id === 'connection')
-        assert.deepEqual(row.inject, [startup])
-        assert.deepEqual(row.config, { trustedHosts: { __jsExpr: `ctx.${startup}.trustedHosts` } })
-        assert.deepEqual([...host.routes.keys()], [CHANNEL])
-        await assertRejectsUnauthenticated(host.routes)
-        await removeEntry(host.loader, 'kimi-subscription')
-        assert.equal(host.routes.size, 0)
-      } finally {
-        await host.close()
-      }
-    })
+test('DSH 0.2.2: shipped bundle opens the account channel on the official row and disposes it', async () => {
+  await withHome(async () => {
+    const host = await mount(bundle, { host: '0.2.2', fullPlugin: true })
+    try {
+      const row = host.rows.find(item => item.id === 'connection')
+      assert.deepEqual(row.inject, ['webStartup', 'webServer'])
+      assert.deepEqual(row.config, { trustedHosts: { __jsExpr: 'ctx.webStartup.trustedHosts' } })
+      assert.deepEqual([...host.routes.keys()], [CHANNEL])
+      await assertRejectsUnauthenticated(host.routes)
+      await removeEntry(host.loader, 'kimi-subscription')
+      assert.equal(host.routes.size, 0)
+    } finally {
+      await host.close()
+    }
   })
-}
+})
 
 test('account channel opens once the web server starts after the plugin, and again after a restart', async () => {
   await withHome(async () => {
-    const host = await mount(bundle, { host: '0.2.1', fullPlugin: true, webServer: false })
+    const host = await compose(bundle, { host: '0.2.2', fullPlugin: true, webServer: false })
     try {
-      // Models and settings do not wait for the web server; only the channel does.
-      assert.equal(stateOf(host.loader, 'connection'), ACTIVE)
+      // Declared dependency now intentionally holds Connection and its consumer.
+      assert.notEqual(stateOf(host.loader, 'connection'), ACTIVE)
+      assert.notEqual(stateOf(host.loader, 'kimi-subscription'), ACTIVE)
       assert.equal(host.routes.size, 0)
       await host.startWebServer()
+      assert.equal(stateOf(host.loader, 'connection'), ACTIVE)
+      assert.equal(stateOf(host.loader, 'kimi-subscription'), ACTIVE)
       assert.deepEqual([...host.routes.keys()], [CHANNEL])
       await assertRejectsUnauthenticated(host.routes)
       await host.stopWebServer()
+      assert.notEqual(stateOf(host.loader, 'connection'), ACTIVE)
+      assert.notEqual(stateOf(host.loader, 'kimi-subscription'), ACTIVE)
       assert.equal(host.routes.size, 0)
       await host.startWebServer()
+      assert.equal(stateOf(host.loader, 'connection'), ACTIVE)
       assert.equal(stateOf(host.loader, 'kimi-subscription'), ACTIVE)
       assert.deepEqual([...host.routes.keys()], [CHANNEL])
+      await assertRejectsUnauthenticated(host.routes)
     } finally {
       await host.close()
     }
@@ -218,7 +225,7 @@ test('account channel opens once the web server starts after the plugin, and aga
 
 test('full Kimi plugin activates with the 0.1.2-alpha.5 Connection', async () => {
   await withHome(async () => {
-    const host = await mount(bundle, { host: '0.2.0', legacy: true, fullPlugin: true })
+    const host = await mount([...ORIGINAL_PLUGIN_PATCH, ROW_PATCH_1_3_8], { host: '0.2.0', legacy: true, fullPlugin: true })
     try {
       assert.equal(host.routes.has(CHANNEL), true)
     } finally {

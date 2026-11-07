@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Preserve the installed pi-ai provider's protocol root when resolving regional subscription credentials: `/coding` for Anthropic and `/coding/v1` for OpenAI. Fixes requests to the missing `/coding/chat/completions` endpoint on pi-ai 1.3.0.
+- Apply the correction to both OAuth and subscription keys; accept both fixed protocol roots for usage/search region lookup. No credential migration, cross-region retry, or API-billing fallback.
+- Repair account RPC registration on DSH Web 0.2.2 by declaring Connection's webServer dependency and removing the obsolete private Fiber workaround module. Preserve startup dependency and configuration; let Connection's dependency lifecycle own account channel teardown and re-registration.
+
 ## 1.5.0 — 2026-11-03
 
 - Support Kimi Code's international site ([#6](https://github.com/BaronCyrus/dsh-kimi-subscription/issues/6)). Kimi Code runs two sites, China on kimi.com and international on kimi.ai, each with its own API host and authorization server; the [Kimi Code documentation](https://www.kimi.com/code/docs/kimi-code/models.html) lists both API hosts, and the official [kimi-code](https://github.com/MoonshotAI/kimi-code) client lists both authorization servers. Until now every request went to the China hosts: models, usage, and search to `api.kimi.com/coding`, and device sign-in and token refresh to `auth.kimi.com`. The issue reports that an international key is currently accepted there too, which Kimi does not document.

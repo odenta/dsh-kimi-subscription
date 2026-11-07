@@ -2,7 +2,7 @@ import { kimiCodingProvider as createKimiCodingProvider } from '@earendil-works/
 
 import { DISPLAY_NAME, PROVIDER } from './constants.js'
 import { createKimiOAuth } from './kimi-oauth.js'
-import { kimiRegionSite } from './kimi-region.js'
+import { kimiRegionModelBaseUrl } from './kimi-region.js'
 
 export { createModels } from '@earendil-works/pi-ai'
 export { createKimiOAuth, KimiOAuthError, classifyKimiOAuthFailure } from './kimi-oauth.js'
@@ -209,13 +209,13 @@ export function guardKimiStreamAuthRejection(stream, onAuthRejected) {
  * @param apiKey - pi-ai's API-key auth for Kimi Code.
  * @returns the same auth, with each resolution naming its region's base URL.
  */
-function withKimiRegionBaseUrl(apiKey) {
+function withKimiRegionBaseUrl(apiKey, catalogBaseUrl) {
   return Object.freeze({
     ...apiKey,
     async resolve(input) {
       const resolution = await apiKey.resolve(input)
       if (resolution === undefined) return undefined
-      return { ...resolution, auth: { ...resolution.auth, baseUrl: kimiRegionSite(input?.credential?.region).baseUrl } }
+      return { ...resolution, auth: { ...resolution.auth, baseUrl: kimiRegionModelBaseUrl(input?.credential?.region, catalogBaseUrl) } }
     },
   })
 }
@@ -250,8 +250,14 @@ export function createKimiSubscriptionProvider({ onAuthRejected, oauth, fetchImp
     baseUrl: base.baseUrl,
     headers: base.headers,
     auth: Object.freeze({
-      apiKey: withKimiRegionBaseUrl(base.auth.apiKey),
-      oauth: subscriptionOAuth,
+      apiKey: withKimiRegionBaseUrl(base.auth.apiKey, base.baseUrl),
+      oauth: Object.freeze({
+        ...subscriptionOAuth,
+        async toAuth(credential) {
+          const auth = await subscriptionOAuth.toAuth(credential)
+          return { ...auth, baseUrl: kimiRegionModelBaseUrl(credential.region, base.baseUrl) }
+        },
+      }),
     }),
     getModels: () => models,
     stream: (model, context, options) => guardKimiStreamAuthRejection(base.stream(model, context, options), onAuthRejected),
